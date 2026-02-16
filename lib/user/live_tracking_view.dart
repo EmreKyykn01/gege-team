@@ -12,9 +12,9 @@ class LiveTrackingView extends StatefulWidget {
 class _LiveTrackingViewState extends State<LiveTrackingView> {
   final Completer<GoogleMapController> _controller = Completer();
 
-  // Kuryenin başlangıç konumu (Örnek Koordinat)
+  // Kuryenin başlangıç konumu (Gebze)
   static final CameraPosition _initialPosition = CameraPosition(
-    target: LatLng(41.0825, 29.0125), // Levent civarı
+    target: LatLng(40.8021, 29.4370), // Gebze
     zoom: 14.5,
   );
 
@@ -29,20 +29,19 @@ class _LiveTrackingViewState extends State<LiveTrackingView> {
 
   void _setMarkers() {
     setState(() {
-      // Kurye Pini
+      // Kurye Pini (Gebze)
       _markers.add(
         Marker(
           markerId: const MarkerId("courier"),
-          position: const LatLng(41.0825, 29.0125),
+          position: const LatLng(40.8021, 29.4370), // Gebze
           infoWindow: const InfoWindow(title: "Kurye Konumu"),
-          // İleride buraya BitmapDescriptor ile özel motor/araç ikonu koyabiliriz
         ),
       );
-      // Teslimat Noktası Pini
+      // Teslimat Noktası Pini (örnek: Kadıköy)
       _markers.add(
         Marker(
           markerId: const MarkerId("destination"),
-          position: const LatLng(40.9631, 29.0825), // Caddebostan civarı
+          position: const LatLng(40.9631, 29.0825), // Kadıköy
           infoWindow: const InfoWindow(title: "Teslimat Noktası"),
         ),
       );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'live_tracking_view.dart';
+import 'shipments_view.dart';
+import 'user_main_screen.dart';
+
 class PaymentView extends StatefulWidget {
   const PaymentView({super.key});
 
@@ -197,11 +199,65 @@ class _PaymentViewState extends State<PaymentView> {
         height: 56,
         child: ElevatedButton(
           onPressed: () {
-            // Canlı takip ekranına yönlendirme
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const LiveTrackingView()),
-                  (route) => route.isFirst, // Sadece ana menüyü arkada bırakır, diğerlerini siler
+            showGeneralDialog(
+              context: context,
+              barrierDismissible: true,
+              barrierLabel: 'Sipariş Popup',
+              transitionDuration: const Duration(milliseconds: 300),
+              pageBuilder: (context, animation, secondaryAnimation) {
+                return Center(
+                  child: Dialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1DE9B6).withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(18),
+                            child: const Icon(Icons.check_circle, color: Color(0xFF00BFA5), size: 48),
+                          ),
+                          const SizedBox(height: 24),
+                          const Text("Siparişiniz başarıyla oluşturuldu!", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                          const SizedBox(height: 12),
+                          const Text("Siparişiniz alınmıştır. Takip ve güncellemeler için gönderiler ekranını kullanabilirsiniz.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context); // Dialog kapanır
+
+                                Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const UserMainScreen(initialIndex: 1), // Gönderiler sekmesi
+                                  ),
+                                      (route) => false,
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00BFA5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                "Tamam",
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             );
           },
           style: ElevatedButton.styleFrom(

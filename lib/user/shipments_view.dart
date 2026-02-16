@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'live_tracking_view.dart'; // LiveTrackingView için import eklendi
 
 class ShipmentsView extends StatelessWidget {
   const ShipmentsView({super.key});
@@ -29,8 +30,8 @@ class ShipmentsView extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            _buildActiveShipmentsTab(),
-            _buildPastShipmentsTab(),
+            _buildActiveShipmentsTab(context),
+            _buildPastShipmentsTab(context),
           ],
         ),
       ),
@@ -38,11 +39,12 @@ class ShipmentsView extends StatelessWidget {
   }
 
   // 1. Sekme: Aktif Gönderiler
-  Widget _buildActiveShipmentsTab() {
+  Widget _buildActiveShipmentsTab(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _buildShipmentCard(
+          context: context,
           id: "#GE-88421",
           status: "Kurye Yolda",
           statusColor: const Color(0xFF1DE9B6),
@@ -57,11 +59,12 @@ class ShipmentsView extends StatelessWidget {
   }
 
   // 2. Sekme: Geçmiş İşlemler
-  Widget _buildPastShipmentsTab() {
+  Widget _buildPastShipmentsTab(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _buildShipmentCard(
+          context: context,
           id: "#GE-88400",
           status: "Teslim Edildi",
           statusColor: Colors.grey.shade600,
@@ -71,6 +74,7 @@ class ShipmentsView extends StatelessWidget {
           isActive: false,
         ),
         _buildShipmentCard(
+          context: context,
           id: "#GE-88392",
           status: "İptal Edildi",
           statusColor: Colors.redAccent,
@@ -85,6 +89,7 @@ class ShipmentsView extends StatelessWidget {
 
   // Gönderi Kartı Tasarımı
   Widget _buildShipmentCard({
+    required BuildContext context,
     required String id,
     required String status,
     required Color statusColor,
@@ -100,7 +105,7 @@ class ShipmentsView extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))
         ],
       ),
       child: Column(
@@ -114,7 +119,7 @@ class ShipmentsView extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -170,7 +175,10 @@ class ShipmentsView extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () {
-                  // TODO: İleride buradan direkt canlı takip ekranına yönlendirme yapabiliriz.
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LiveTrackingView()),
+                  );
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF00BFA5),
