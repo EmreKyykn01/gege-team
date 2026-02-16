@@ -1,0 +1,27 @@
+name: gg
+description: "Gelirken Getir"
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.8.1 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_core: ^2.30.0
+  firebase_auth: ^4.19.0
+  cloud_firestore: ^4.17.0
+  google_maps_flutter: ^2.5.3
+  carousel_slider: ^5.0.0
+  flutter_svg: ^2.0.10
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
