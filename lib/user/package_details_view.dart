@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'call_courier_view.dart';
+
 class PackageDetailsView extends StatefulWidget {
   const PackageDetailsView({super.key});
 
@@ -8,13 +9,28 @@ class PackageDetailsView extends StatefulWidget {
 }
 
 class _PackageDetailsViewState extends State<PackageDetailsView> {
-  String selectedSize = "Küçük"; // Varsayılan seçim
+  // Form Controllers
+  final _pickupController = TextEditingController();
+  final _deliveryController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _weightController = TextEditingController();
+
+  String selectedSize = "Küçük";
   bool isFragile = false;
+
+  @override
+  void dispose() {
+    _pickupController.dispose();
+    _deliveryController.dispose();
+    _descriptionController.dispose();
+    _weightController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Açık gri arka plan
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -30,6 +46,15 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Nereden - Nereye
+            const Text("Kargo Yolculuğu", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildAddressField("Nereden", "Çıkış noktası", Icons.location_on, _pickupController),
+            const SizedBox(height: 12),
+            _buildAddressField("Nereye", "Varış noktası", Icons.location_on_outlined, _deliveryController),
+            const SizedBox(height: 24),
+
+            // Paket Boyutu
             const Text("Paket Boyutu Seçin", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             Row(
@@ -41,12 +66,18 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
               ],
             ),
             const SizedBox(height: 24),
+
+            // Ağırlık
             _buildWeightInput(),
             const SizedBox(height: 16),
+
+            // Açıklama
             _buildContentInput(),
             const SizedBox(height: 16),
+
+            // Hassas Paket
             _buildFragileSwitch(),
-            const SizedBox(height: 120), // Alt barın üstüne binmemesi için boşluk
+            const SizedBox(height: 120),
           ],
         ),
       ),
@@ -54,7 +85,30 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
     );
   }
 
-  // Boyut Seçim Kartları
+  // NEREDEN / NEREYE ADRES ALANLARI
+  Widget _buildAddressField(String label, String hint, IconData icon, TextEditingController controller) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.grey.shade400),
+          prefixIcon: Icon(icon, color: Colors.grey),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        ),
+      ),
+    );
+  }
+
+  // BOYUT KARTLARI
   Widget _buildSizeCard(String title, String size, IconData icon) {
     bool isSelected = selectedSize == title;
     return GestureDetector(
@@ -79,12 +133,13 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
     );
   }
 
-  // Ağırlık Giriş Alanı
+  // AĞIRLIK ALANI
   Widget _buildWeightInput() {
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
       child: TextField(
-        keyboardType: TextInputType.number,
+        controller: _weightController,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: const InputDecoration(
           labelText: "AĞIRLIK (KG)",
           labelStyle: TextStyle(color: Colors.grey, fontSize: 12),
@@ -97,17 +152,18 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
     );
   }
 
-  // İçerik Açıklaması Alanı
+  // İÇERİK AÇIKLAMASI
   Widget _buildContentInput() {
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
-      child: const TextField(
+      child: TextField(
+        controller: _descriptionController,
         maxLines: 3,
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           labelText: "İÇERİK AÇIKLAMASI",
           labelStyle: TextStyle(color: Colors.grey, fontSize: 12),
           prefixIcon: Padding(
-            padding: EdgeInsets.only(bottom: 40.0), // İkonu yukarı hizalamak için
+            padding: EdgeInsets.only(bottom: 40.0),
             child: Icon(Icons.description_outlined, color: Colors.grey),
           ),
           hintText: "Paket içerisinde ne var?",
@@ -118,7 +174,7 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
     );
   }
 
-  // Hassas Paket Anahtarı (Switch)
+  // HASSAS PAKET
   Widget _buildFragileSwitch() {
     return Container(
       padding: const EdgeInsets.all(8),
@@ -138,7 +194,7 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
     );
   }
 
-  // En Alttaki Fiyat ve Devam Et Butonu
+  // DEVAM ET BUTONU
   Widget _buildBottomBar() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -162,13 +218,7 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () {
-                // ARAÇ SEÇİMİ (call_courier_view.dart) EKRANINA YÖNLENDİRME
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CallCourierView()),
-                );
-              },
+              onPressed: _validateAndContinue,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1DE9B6),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -185,6 +235,43 @@ class _PackageDetailsViewState extends State<PackageDetailsView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // VALIDASYON VE NAVİGASYON
+  void _validateAndContinue() {
+    if (_pickupController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen çıkış noktasını girin')),
+      );
+      return;
+    }
+    if (_deliveryController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen varış noktasını girin')),
+      );
+      return;
+    }
+    if (_descriptionController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen paket açıklaması girin')),
+      );
+      return;
+    }
+
+    // Verileri Call Courier View'e gönder
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CallCourierView(
+          pickupAddress: _pickupController.text,
+          deliveryAddress: _deliveryController.text,
+          description: _descriptionController.text,
+          weight: double.tryParse(_weightController.text) ?? 1.0,
+          size: selectedSize,
+          isFragile: isFragile,
+        ),
       ),
     );
   }

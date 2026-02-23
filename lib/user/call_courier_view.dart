@@ -1,17 +1,30 @@
 import 'package:flutter/material.dart';
 import 'payment_view.dart';
-// Bir sonraki adımda ödeme ekranını yapacağımız için şimdiden importunu hazırlıyoruz
-// import 'payment_view.dart';
 
 class CallCourierView extends StatefulWidget {
-  const CallCourierView({super.key});
+  final String pickupAddress;
+  final String deliveryAddress;
+  final String description;
+  final double weight;
+  final String size;
+  final bool isFragile;
+
+  const CallCourierView({
+    super.key,
+    required this.pickupAddress,
+    required this.deliveryAddress,
+    required this.description,
+    required this.weight,
+    required this.size,
+    required this.isFragile,
+  });
 
   @override
   State<CallCourierView> createState() => _CallCourierViewState();
 }
 
 class _CallCourierViewState extends State<CallCourierView> {
-  int _selectedVehicle = 0; // 0: Motor, 1: Araç, 2: Panelvan
+  int _selectedVehicle = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -105,17 +118,17 @@ class _CallCourierViewState extends State<CallCourierView> {
           ),
           const SizedBox(width: 16),
           // Adres Metinleri
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("NEREDEN?", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                SizedBox(height: 4),
-                Text("Levent, Beşiktaş", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                SizedBox(height: 16),
-                Text("NEREYE?", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                SizedBox(height: 4),
-                Text("Caddebostan, Kadıköy", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                const Text("NEREDEN?", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(widget.pickupAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 16),
+                const Text("NEREYE?", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(widget.deliveryAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
               ],
             ),
           )
@@ -184,10 +197,7 @@ class _CallCourierViewState extends State<CallCourierView> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () {
-
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const PaymentView()));
-              },
+              onPressed: _goToPayment,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1DE9B6),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -275,6 +285,39 @@ class _CallCourierViewState extends State<CallCourierView> {
               ],
             )
           ],
+        ),
+      ),
+    );
+  }
+
+  // Ödeme ekranına git - tüm verileri gönder
+  void _goToPayment() {
+    String vehicleType = '';
+    double price = 0;
+
+    if (_selectedVehicle == 0) {
+      vehicleType = 'Motor Kurye';
+      price = 45.0;
+    } else if (_selectedVehicle == 1) {
+      vehicleType = 'Araç Kurye';
+      price = 85.0;
+    } else {
+      vehicleType = 'Panelvan';
+      price = 150.0;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentView(
+          pickupAddress: widget.pickupAddress,
+          deliveryAddress: widget.deliveryAddress,
+          description: widget.description,
+          weight: widget.weight,
+          size: widget.size,
+          isFragile: widget.isFragile,
+          vehicleType: vehicleType,
+          vehiclePrice: price,
         ),
       ),
     );

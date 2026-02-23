@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/error_handler.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -190,27 +191,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     } on FirebaseAuthException catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      String errorMsg = 'Kayıt başarısız oldu.';
-      
-      if (e.code == 'email-already-in-use') {
-        errorMsg = 'Bu e-posta zaten kullanımda.\nFarklı bir e-posta deneyiniz.';
-      } else if (e.code == 'weak-password') {
-        errorMsg = 'Şifre çok zayıf.\nEn az 8 karakter, harf ve rakam içermelidir.';
-      } else if (e.code == 'invalid-email') {
-        errorMsg = 'Geçersiz e-posta adresi.';
-      }
+      String errorMsg = ErrorHandler.getAuthErrorMessage(e.code);
 
-      await _showPremiumPopup('Hata', errorMsg, success: false);
+      _showPremiumPopup(
+        'Kayıt Hatası',
+        errorMsg,
+        success: false,
+      );
+    } on FirebaseException catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+      String errorMsg = ErrorHandler.getFirestoreErrorMessage(e.message ?? '');
 
+      _showPremiumPopup(
+        'Ağ Hatası',
+        errorMsg,
+        success: false,
+      );
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      await _showPremiumPopup(
-        'Bağlantı Hatası',
-        'Veritabanı bağlantısı kurulamadı.\nLütfen internet bağlantınızı kontrol edin.',
+      String errorMsg = ErrorHandler.getGeneralErrorMessage(e.toString());
+
+      _showPremiumPopup(
+        'Hata',
+        errorMsg,
         success: false,
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +352,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   controller: _nameController,
                                   hint: 'Ahmet Yılmaz',
                                   icon: Icons.person_outline,
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Ad soyad gerekli' : null,
+                                  validator: ErrorHandler.validateName,
                                 ),
                                 const SizedBox(height: 16),
 
@@ -355,11 +363,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   controller: _emailController,
                                   hint: 'example@mail.com',
                                   icon: Icons.email_outlined,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) return 'Email gerekli';
-                                    if (!v.contains('@')) return 'Geçersiz email';
-                                    return null;
-                                  },
+                                  validator: ErrorHandler.validateEmail,
                                 ),
                                 const SizedBox(height: 16),
 
@@ -370,7 +374,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   controller: _phoneController,
                                   hint: '05XX XXX XXXX',
                                   icon: Icons.phone_outlined,
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Telefon gerekli' : null,
+                                  validator: ErrorHandler.validatePhoneNumber,
                                 ),
                                 const SizedBox(height: 16),
 
@@ -389,11 +393,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     ),
                                     onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                                   ),
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) return 'Şifre gerekli';
-                                    if (v.length < 6) return 'En az 6 karakter';
-                                    return null;
-                                  },
+                                  validator: ErrorHandler.validatePassword,
                                 ),
                                 const SizedBox(height: 16),
 

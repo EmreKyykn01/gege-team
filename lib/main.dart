@@ -5,9 +5,15 @@ import 'Authentication/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init hatası: $e');
+  }
+
   runApp(const MyApp());
 }
 
@@ -16,9 +22,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
+      title: 'GEGE - Profesyonel Lojistik',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF12D6C5),
+        ),
+      ),
+      home: const LoginScreen(),
+      // TODO: Named routes eklenmesi planlanmaktadır
     );
   }
 }

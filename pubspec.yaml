@@ -12,11 +12,13 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  firebase_core: ^2.30.0
-  firebase_auth: ^4.19.0
-  cloud_firestore: ^4.17.0
+  firebase_core: ^2.0.0
+  firebase_auth: ^4.0.0
+  cloud_firestore: ^4.0.0
   carousel_slider: ^5.1.2
   google_maps_flutter: ^2.3.0
+  firebase_storage: ^11.0.0
+  image_picker: ^1.0.0
 
 dev_dependencies:
   flutter_test:

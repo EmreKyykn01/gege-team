@@ -1,16 +1,134 @@
 import 'package:flutter/material.dart';
-import 'shipments_view.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../models/shipment_model.dart';
+import '../services/firestore_service.dart';
+import '../utils/error_handler.dart';
 import 'user_main_screen.dart';
 
 class PaymentView extends StatefulWidget {
-  const PaymentView({super.key});
+  final String pickupAddress;
+  final String deliveryAddress;
+  final String description;
+  final double weight;
+  final String size;
+  final bool isFragile;
+  final String vehicleType;
+  final double vehiclePrice;
+
+  const PaymentView({
+    super.key,
+    required this.pickupAddress,
+    required this.deliveryAddress,
+    required this.description,
+    required this.weight,
+    required this.size,
+    required this.isFragile,
+    required this.vehicleType,
+    required this.vehiclePrice,
+  });
 
   @override
   State<PaymentView> createState() => _PaymentViewState();
 }
 
 class _PaymentViewState extends State<PaymentView> {
-  int _selectedPaymentMethod = 0; // 0: Kredi Kartı, 1: Cüzdan
+  int _selectedPaymentMethod = 0;
+  bool _isProcessing = false;
+
+  // Kargo oluşturma fonksiyonu
+  Future<void> _processPayment() async {
+    setState(() => _isProcessing = true);
+
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        _showErrorDialog('Hata', 'Oturum açmış değilsiniz');
+        setState(() => _isProcessing = false);
+        return;
+      }
+
+      // Eşsiz takip numarası otomatik oluşturulacak
+      final shipment = ShipmentModel(
+        id: '', // Firestore auto-generate
+        senderId: currentUser.uid,
+        courierId: null,
+        recipientName: 'Alıcı', // TODO: Formdan al
+        recipientPhone: '05301234567', // TODO: Formdan al
+        pickupAddress: widget.pickupAddress,
+        deliveryAddress: widget.deliveryAddress,
+        status: 'pending',
+        price: widget.vehiclePrice,
+        description: widget.description,
+        weight: widget.weight,
+        createdAt: DateTime.now(),
+        // trackingNumber otomatik oluşturulacak
+      );
+
+      // Firestore'a kaydet
+      final shipmentId = await FirestoreService().createShipment(shipment);
+
+      // Firestore'dan takip numarasını al
+      final savedShipment = await FirestoreService().getShipmentById(shipmentId);
+
+      setState(() => _isProcessing = false);
+
+      // Başarılı mesajı
+      _showSuccessDialog(
+        'Başarılı!',
+        'Kargonuz oluşturuldu.\nTakip No: ${savedShipment?.trackingNumber ?? "GE-XXXXX"}\n\nAraç: ${widget.vehicleType}',
+      );
+
+      // 2 saniye sonra ana ekrana dön
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const UserMainScreen(initialIndex: 1)),
+          (route) => false,
+        );
+      }
+    } on FirebaseException catch (e) {
+      setState(() => _isProcessing = false);
+      final msg = ErrorHandler.getFirestoreErrorMessage(e.message ?? '');
+      _showErrorDialog('Veritabanı Hatası', msg);
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      _showErrorDialog('Hata', ErrorHandler.getGeneralErrorMessage(e.toString()));
+    }
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tamam', style: TextStyle(color: Color(0xFF1DE9B6))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSuccessDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tamam', style: TextStyle(color: Color(0xFF1DE9B6))),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +167,9 @@ class _PaymentViewState extends State<PaymentView> {
 
   // Sipariş Özeti Kartı
   Widget _buildOrderSummary() {
+    final serviceFee = widget.vehiclePrice * 0.1; // %10 hizmet bedeli
+    final total = widget.vehiclePrice + serviceFee;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -61,18 +182,34 @@ class _PaymentViewState extends State<PaymentView> {
         children: [
           const Text("Sipariş Özeti", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 16),
-          _buildSummaryRow("Teslimat Ücreti", "₺45.00"),
+
+          // Araç Tipi
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Araç Tipi", style: TextStyle(color: Colors.grey)),
+              Text(widget.vehicleType, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
           const SizedBox(height: 8),
-          _buildSummaryRow("Hizmet Bedeli", "₺4.50"),
+
+          // Teslimat Ücreti
+          _buildSummaryRow("Teslimat Ücreti", "₺${widget.vehiclePrice.toStringAsFixed(2)}"),
+          const SizedBox(height: 8),
+
+          // Hizmet Bedeli
+          _buildSummaryRow("Hizmet Bedeli", "₺${serviceFee.toStringAsFixed(2)}"),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(),
           ),
+
+          // Toplam
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text("Toplam", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text("₺49.50", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF00BFA5))),
+            children: [
+              const Text("Toplam", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text("₺${total.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF00BFA5))),
             ],
           ),
         ],
@@ -198,81 +335,33 @@ class _PaymentViewState extends State<PaymentView> {
         width: double.infinity,
         height: 56,
         child: ElevatedButton(
-          onPressed: () {
-            showGeneralDialog(
-              context: context,
-              barrierDismissible: true,
-              barrierLabel: 'Sipariş Popup',
-              transitionDuration: const Duration(milliseconds: 300),
-              pageBuilder: (context, animation, secondaryAnimation) {
-                return Center(
-                  child: Dialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1DE9B6).withOpacity(0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            padding: const EdgeInsets.all(18),
-                            child: const Icon(Icons.check_circle, color: Color(0xFF00BFA5), size: 48),
-                          ),
-                          const SizedBox(height: 24),
-                          const Text("Siparişiniz başarıyla oluşturuldu!", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                          const SizedBox(height: 12),
-                          const Text("Siparişiniz alınmıştır. Takip ve güncellemeler için gönderiler ekranını kullanabilirsiniz.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context); // Dialog kapanır
-
-                                Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const UserMainScreen(initialIndex: 1), // Gönderiler sekmesi
-                                  ),
-                                      (route) => false,
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00BFA5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text(
-                                "Tamam",
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
+          onPressed: _isProcessing ? null : _processPayment,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1A1A1A), // Siyah şık buton
+            backgroundColor: const Color(0xFF1A1A1A),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             elevation: 0,
+            disabledBackgroundColor: Colors.grey[400],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.lock_outline, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text("₺49.50 Öde", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
+          child: _isProcessing
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.lock_outline, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      "₺${(widget.vehiclePrice * 1.1).toStringAsFixed(2)} Öde",
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
         ),
       ),
     );

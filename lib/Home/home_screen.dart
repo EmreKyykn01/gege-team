@@ -11,7 +11,6 @@ class HomeScreen extends StatelessWidget {
     const Color darkBg = Color(0xFF111827); // Çok koyu lacivert/siyah
     const Color cardBg = Color(0xFF1F2937); // Kart arka planı
     const Color primaryYellow = Color(0xFFEAB308); // Canlı sarı
-    const Color mutedText = Color(0xFF9CA3AF);
 
     return Scaffold(
       backgroundColor: darkBg,

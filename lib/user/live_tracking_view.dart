@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
+import '../models/shipment_model.dart';
 
 class LiveTrackingView extends StatefulWidget {
-  const LiveTrackingView({super.key});
+  final ShipmentModel shipment;
+
+  const LiveTrackingView({super.key, required this.shipment});
 
   @override
   State<LiveTrackingView> createState() => _LiveTrackingViewState();
@@ -12,37 +15,49 @@ class LiveTrackingView extends StatefulWidget {
 class _LiveTrackingViewState extends State<LiveTrackingView> {
   final Completer<GoogleMapController> _controller = Completer();
 
-  // Kuryenin başlangıç konumu (Gebze)
-  static final CameraPosition _initialPosition = CameraPosition(
-    target: LatLng(40.8021, 29.4370), // Gebze
-    zoom: 14.5,
-  );
-
-  // Harita üzerindeki pinler
+  late CameraPosition _initialPosition;
   final Set<Marker> _markers = <Marker>{};
 
   @override
   void initState() {
     super.initState();
+    // İlk konum pickup address'ten başla (örnek koordinat)
+    _initialPosition = CameraPosition(
+      target: const LatLng(40.9631, 29.0825), // Kadıköy
+      zoom: 14.5,
+    );
     _setMarkers();
   }
 
   void _setMarkers() {
     setState(() {
-      // Kurye Pini (Gebze)
+      // Pickup (Başlangıç)
+      _markers.add(
+        Marker(
+          markerId: const MarkerId("pickup"),
+          position: const LatLng(40.8021, 29.4370), // Gebze
+          infoWindow: InfoWindow(title: "Kargo: ${widget.shipment.pickupAddress}"),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        ),
+      );
+
+      // Delivery (Hedef)
+      _markers.add(
+        Marker(
+          markerId: const MarkerId("delivery"),
+          position: const LatLng(40.9631, 29.0825), // Kadıköy
+          infoWindow: InfoWindow(title: "Teslimat: ${widget.shipment.deliveryAddress}"),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+
+      // Courier (Kurye konumu - şu anda ortada)
       _markers.add(
         Marker(
           markerId: const MarkerId("courier"),
-          position: const LatLng(40.8021, 29.4370), // Gebze
+          position: const LatLng(40.8826, 29.2596), // Arası
           infoWindow: const InfoWindow(title: "Kurye Konumu"),
-        ),
-      );
-      // Teslimat Noktası Pini (örnek: Kadıköy)
-      _markers.add(
-        Marker(
-          markerId: const MarkerId("destination"),
-          position: const LatLng(40.9631, 29.0825), // Kadıköy
-          infoWindow: const InfoWindow(title: "Teslimat Noktası"),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
         ),
       );
     });
@@ -51,134 +66,126 @@ class _LiveTrackingViewState extends State<LiveTrackingView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text("Canlı Takip", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+      ),
       body: Stack(
         children: [
-          // 1. Harita Katmanı
           GoogleMap(
             mapType: MapType.normal,
             initialCameraPosition: _initialPosition,
-            markers: _markers,
-            myLocationButtonEnabled: false, // Kendi konum butonunu gizler
-            zoomControlsEnabled: false, // Ekrandaki + / - butonlarını gizler
-            onMapCreated: (GoogleMapController controller) {
+            onMapCreated: (controller) {
               _controller.complete(controller);
             },
+            markers: _markers,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
           ),
 
-          // 2. Üst Geri Butonu (Harita üzerinde yüzen buton)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: CircleAvatar(
-                backgroundColor: Colors.white,
-                radius: 24,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
-                  onPressed: () => Navigator.pop(context), // Ana menüye veya ödemeye döner
-                ),
-              ),
-            ),
-          ),
-
-          // 3. Alt Kurye Bilgi Kartı
+          // Alt panel: Kargo ve Kurye Bilgileri
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: _buildCourierCard(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCourierCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Üstteki küçük gri çubuk
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-          ),
-          const SizedBox(height: 20),
-
-          // Durum ve Tahmini Süre
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("Kurye Yolda", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF1DE9B6).withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
-                child: const Text("15 dk", style: TextStyle(color: Color(0xFF00BFA5), fontWeight: FontWeight.bold)),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 15,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Kargo ID ve Durum
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        widget.shipment.id,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1DE9B6).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          widget.shipment.statusInTurkish,
+                          style: const TextStyle(color: Color(0xFF1DE9B6), fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-          // Kurye Profil Bilgileri
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 28,
-                backgroundColor: Color(0xFFF8F9FA),
-                backgroundImage: NetworkImage("https://cdn-icons-png.flaticon.com/512/3135/3135715.png"), // Temsili kurye resmi
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Ahmet Yılmaz", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 16),
-                        const SizedBox(width: 4),
-                        const Text("4.9", style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 8),
-                        Text("• 34 ABC 123", style: TextStyle(color: Colors.grey.shade600)),
-                      ],
+                  // Pickup - Delivery
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Nereden', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(
+                              widget.shipment.pickupAddress,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Icon(Icons.arrow_forward, color: Colors.grey),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Nereye', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(
+                              widget.shipment.deliveryAddress,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // İlerleme
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: widget.shipment.progressPercentage,
+                      minHeight: 8,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1DE9B6)),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-
-              // Arama Butonu
-              Container(
-                decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
-                child: IconButton(
-                  icon: const Icon(Icons.call, color: Colors.black),
-                  onPressed: () {
-                    // TODO: Telefon araması tetiklenecek
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Mesajlaşma Butonu
-              Container(
-                decoration: BoxDecoration(color: const Color(0xFF1DE9B6), shape: BoxShape.circle),
-                child: IconButton(
-                  icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-                  onPressed: () {
-                    // TODO: Sohbet ekranı açılacak
-                  },
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16), // Alt boşluk
         ],
       ),
     );

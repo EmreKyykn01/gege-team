@@ -1,4 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../services/firestore_service.dart';
 
 class SavedAddressesView extends StatefulWidget {
   const SavedAddressesView({super.key});
@@ -12,32 +15,70 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  List<Map<String, dynamic>> addresses = [
-    {
-      'id': '1',
-      'title': 'Ev',
-      'address': 'Levent Mah. Çiçek Sok. No: 12 D: 4\nBeşiktaş / İstanbul',
-      'phone': '+90 555 123 4567',
-      'icon': Icons.home_rounded,
-      'isDefault': true,
-    },
-    {
-      'id': '2',
-      'title': 'İş',
-      'address': 'Maslak Mah. Meydan Sok. Plaza Kat: 5\nSarıyer / İstanbul',
-      'phone': '+90 555 987 6543',
-      'icon': Icons.work_rounded,
-      'isDefault': false,
-    },
-  ];
+  List<Map<String, dynamic>> addresses = [];
+  bool isLoading = true;
 
-  // Premium Popup göster
-  void _showPremiumDialog(String title, Widget content) {
+  // Tema renkleri
+  static const Color _primaryGreen = Color(0xFF12D6C5);
+  static const Color _successColor = Color(0xFF10B981);
+  static const Color _errorColor = Color(0xFFEF4444);
+  static const Color _textDark = Color(0xFF1F2937);
+  static const Color _textMuted = Color(0xFF6B7280);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAddresses();
+  }
+
+  Future<void> _loadAddresses() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final userData = await FirestoreService().getUserById(user.uid);
+    setState(() {
+      addresses = userData?.addresses ?? [];
+      isLoading = false;
+    });
+  }
+
+  Future<void> _addAddress(Map<String, dynamic> address) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await FirestoreService().addUserAddress(user.uid, address);
+    await _loadAddresses();
+  }
+
+  Future<void> _updateAddress(int index, Map<String, dynamic> address) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await FirestoreService().updateUserAddress(user.uid, index, address);
+    await _loadAddresses();
+  }
+
+  Future<void> _deleteAddress(int index) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await FirestoreService().deleteUserAddress(user.uid, index);
+    await _loadAddresses();
+  }
+
+  // Modern temalı popup
+  Future<void> _showThemedPopup(String title, String message, {required bool success, bool warning = false, int durationMs = 2000}) async {
+    if (!mounted) return;
+    final Color iconColor = success
+        ? _successColor
+        : warning
+          ? _primaryGreen
+          : _errorColor;
+    final IconData icon = success
+        ? Icons.check_circle_rounded
+        : warning
+          ? Icons.info_rounded
+          : Icons.error_rounded;
     showGeneralDialog(
       context: context,
-      barrierDismissible: false,
-      barrierLabel: 'Dialog',
-      barrierColor: Colors.black.withValues(alpha: 0.5),
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, anim1, anim2) {
         return ScaleTransition(
@@ -53,244 +94,9 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF12D6C5).withValues(alpha: 0.2),
+                    color: _primaryGreen.withValues(alpha: 0.12),
                     blurRadius: 30,
                     offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Başlık
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // İçerik
-                    content,
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // Adres ekleme dialog'u
-  void _showAddAddressDialog() {
-    _nameController.clear();
-    _addressController.clear();
-    _phoneController.clear();
-
-    _showPremiumDialog(
-      '📍 Yeni Adres Ekle',
-      Column(
-        children: [
-          _buildTextField(
-            controller: _nameController,
-            hint: 'Adres Adı (Ev, İş, vb.)',
-            icon: Icons.label_outline,
-          ),
-          const SizedBox(height: 16),
-          _buildTextField(
-            controller: _addressController,
-            hint: 'Sokak, No, Mahalle',
-            icon: Icons.location_on_outlined,
-            maxLines: 3,
-          ),
-          const SizedBox(height: 16),
-          _buildTextField(
-            controller: _phoneController,
-            hint: 'Telefon Numarası',
-            icon: Icons.phone_outlined,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _buildButton(
-                  'İptal',
-                  Colors.grey[300]!,
-                  Colors.grey[700]!,
-                  () => Navigator.pop(context),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildButton(
-                  'Ekle',
-                  const Color(0xFF12D6C5),
-                  Colors.white,
-                  () {
-                    if (_nameController.text.isNotEmpty &&
-                        _addressController.text.isNotEmpty) {
-                      setState(() {
-                        addresses.add({
-                          'id': DateTime.now().toString(),
-                          'title': _nameController.text,
-                          'address': _addressController.text,
-                          'phone': _phoneController.text,
-                          'icon': Icons.location_on_rounded,
-                          'isDefault': false,
-                        });
-                      });
-                      Navigator.pop(context);
-                      _showSuccessPopup('Adres başarıyla eklendi!');
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Adres güncelleme dialog'u
-  void _showEditAddressDialog(int index) {
-    _nameController.text = addresses[index]['title'];
-    _addressController.text = addresses[index]['address'];
-    _phoneController.text = addresses[index]['phone'];
-
-    _showPremiumDialog(
-      '✏️ Adresi Güncelle',
-      Column(
-        children: [
-          _buildTextField(
-            controller: _nameController,
-            hint: 'Adres Adı',
-            icon: Icons.label_outline,
-          ),
-          const SizedBox(height: 16),
-          _buildTextField(
-            controller: _addressController,
-            hint: 'Sokak, No, Mahalle',
-            icon: Icons.location_on_outlined,
-            maxLines: 3,
-          ),
-          const SizedBox(height: 16),
-          _buildTextField(
-            controller: _phoneController,
-            hint: 'Telefon Numarası',
-            icon: Icons.phone_outlined,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _buildButton(
-                  'İptal',
-                  Colors.grey[300]!,
-                  Colors.grey[700]!,
-                  () => Navigator.pop(context),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildButton(
-                  'Güncelle',
-                  const Color(0xFF12D6C5),
-                  Colors.white,
-                  () {
-                    setState(() {
-                      addresses[index]['title'] = _nameController.text;
-                      addresses[index]['address'] = _addressController.text;
-                      addresses[index]['phone'] = _phoneController.text;
-                    });
-                    Navigator.pop(context);
-                    _showSuccessPopup('Adres başarıyla güncellendi!');
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Adres silme dialog'u
-  void _showDeleteAddressDialog(int index) {
-    _showPremiumDialog(
-      '⚠️ Adresi Sil',
-      Column(
-        children: [
-          const Text(
-            'Bu adresi silmek istediğinizden emin misiniz?',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF6B7280),
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _buildButton(
-                  'İptal',
-                  Colors.grey[300]!,
-                  Colors.grey[700]!,
-                  () => Navigator.pop(context),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildButton(
-                  'Sil',
-                  Colors.red[400]!,
-                  Colors.white,
-                  () {
-                    setState(() {
-                      addresses.removeAt(index);
-                    });
-                    Navigator.pop(context);
-                    _showSuccessPopup('Adres silindi!');
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Başarı popup'ı
-  void _showSuccessPopup(String message) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.3),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
-        return ScaleTransition(
-          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
-          child: Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: Colors.white,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
@@ -301,24 +107,235 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
                     width: 60,
                     height: 60,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                      color: iconColor.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.check_circle_rounded,
-                      size: 36,
-                      color: Color(0xFF10B981),
-                    ),
+                    child: Icon(icon, size: 36, color: iconColor),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1F2937),
+                  Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textDark)),
+                  const SizedBox(height: 8),
+                  Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, color: _textMuted)),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryGreen,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
                     ),
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                    child: const Text('Tamam', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    await Future.delayed(Duration(milliseconds: durationMs));
+  }
+
+  // Adres ekleme dialog'u
+  void _showAddAddressDialog() {
+    _nameController.clear();
+    _addressController.clear();
+    _phoneController.clear();
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: Colors.white,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryGreen.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('📍 Yeni Adres Ekle', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textDark)),
+                  const SizedBox(height: 16),
+                  _buildTextField(controller: _nameController, hint: 'Adres Adı (Ev, İş, vb.)', icon: Icons.label_outline),
+                  const SizedBox(height: 16),
+                  _buildTextField(controller: _addressController, hint: 'Sokak, No, Mahalle', icon: Icons.location_on_outlined, maxLines: 3),
+                  const SizedBox(height: 16),
+                  _buildTextField(controller: _phoneController, hint: 'Telefon Numarası', icon: Icons.phone_outlined),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildButton('İptal', Colors.grey[300]!, Colors.grey[700]!, () => Navigator.pop(context)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildButton('Ekle', _primaryGreen, Colors.white, () async {
+                          if (_nameController.text.isNotEmpty && _addressController.text.isNotEmpty) {
+                            final newAddress = {
+                              'id': DateTime.now().toString(),
+                              'title': _nameController.text,
+                              'address': _addressController.text,
+                              'phone': _phoneController.text,
+                              'icon': Icons.location_on_rounded.codePoint,
+                              'isDefault': false,
+                            };
+                            await _addAddress(newAddress);
+                            Navigator.pop(context);
+                            await _showThemedPopup('Başarılı', 'Adres başarıyla eklendi!', success: true);
+                          } else {
+                            await _showThemedPopup('Eksik Bilgi', 'Adres adı ve adres alanı zorunludur.', success: false, warning: true);
+                          }
+                        }),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Adres güncelleme dialog'u
+  void _showEditAddressDialog(int index) {
+    _nameController.text = addresses[index]['title'];
+    _addressController.text = addresses[index]['address'];
+    _phoneController.text = addresses[index]['phone'];
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: Colors.white,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryGreen.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('✏️ Adresi Güncelle', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textDark)),
+                  const SizedBox(height: 16),
+                  _buildTextField(controller: _nameController, hint: 'Adres Adı', icon: Icons.label_outline),
+                  const SizedBox(height: 16),
+                  _buildTextField(controller: _addressController, hint: 'Sokak, No, Mahalle', icon: Icons.location_on_outlined, maxLines: 3),
+                  const SizedBox(height: 16),
+                  _buildTextField(controller: _phoneController, hint: 'Telefon Numarası', icon: Icons.phone_outlined),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildButton('İptal', Colors.grey[300]!, Colors.grey[700]!, () => Navigator.pop(context)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildButton('Güncelle', _primaryGreen, Colors.white, () async {
+                          final updatedAddress = {
+                            'id': addresses[index]['id'],
+                            'title': _nameController.text,
+                            'address': _addressController.text,
+                            'phone': _phoneController.text,
+                            'icon': Icons.location_on_rounded.codePoint,
+                            'isDefault': addresses[index]['isDefault'] ?? false,
+                          };
+                          await _updateAddress(index, updatedAddress);
+                          Navigator.pop(context);
+                          await _showThemedPopup('Başarılı', 'Adres başarıyla güncellendi!', success: true);
+                        }),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Adres silme dialog'u
+  void _showDeleteAddressDialog(int index) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: Colors.white,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryGreen.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('⚠️ Adresi Sil', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textDark)),
+                  const SizedBox(height: 16),
+                  const Text('Bu adresi silmek istediğinizden emin misiniz?', textAlign: TextAlign.center, style: TextStyle(color: _textMuted, fontSize: 14, height: 1.5)),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildButton('İptal', Colors.grey[300]!, Colors.grey[700]!, () => Navigator.pop(context)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildButton('Sil', Colors.red[400]!, Colors.white, () async {
+                          await _deleteAddress(index);
+                          Navigator.pop(context);
+                          await _showThemedPopup('Başarılı', 'Adres silindi!', success: true);
+                        }),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -343,28 +360,30 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
         title: const Text("Kayıtlı Adreslerim", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
-      body: addresses.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.location_off_rounded, size: 64, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  Text('Henüz adres eklenmemiş', style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(20),
-              itemCount: addresses.length,
-              itemBuilder: (context, index) {
-                final address = addresses[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _buildAddressCard(index, address),
-                );
-              },
-            ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : addresses.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.location_off_rounded, size: 64, color: Colors.grey[300]),
+                      const SizedBox(height: 16),
+                      Text('Henüz adres eklenmemiş', style: TextStyle(color: Colors.grey[600])),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: addresses.length,
+                  itemBuilder: (context, index) {
+                    final address = addresses[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildAddressCard(index, address),
+                    );
+                  },
+                ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddAddressDialog,
         backgroundColor: const Color(0xFF12D6C5),
@@ -381,7 +400,7 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: address['isDefault'] ? const Color(0xFF12D6C5) : Colors.transparent,
+          color: address['isDefault'] == true ? const Color(0xFF12D6C5) : Colors.transparent,
           width: 2,
         ),
         boxShadow: [
@@ -397,7 +416,7 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
               color: const Color(0xFF12D6C5).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(address['icon'], color: const Color(0xFF00BFA5), size: 24),
+            child: Icon(IconData(address['icon'], fontFamily: 'MaterialIcons'), color: const Color(0xFF00BFA5), size: 24),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -419,9 +438,17 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
               ],
             ),
           ),
-          PopupMenuButton(
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'edit') {
+                _showEditAddressDialog(index);
+              } else if (value == 'delete') {
+                _showDeleteAddressDialog(index);
+              }
+            },
             itemBuilder: (context) => [
-              PopupMenuItem(
+              PopupMenuItem<String>(
+                value: 'edit',
                 child: const Row(
                   children: [
                     Icon(Icons.edit_outlined, size: 20, color: Color(0xFF12D6C5)),
@@ -429,9 +456,9 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
                     Text('Düzenle'),
                   ],
                 ),
-                onTap: () => _showEditAddressDialog(index),
               ),
-              PopupMenuItem(
+              PopupMenuItem<String>(
+                value: 'delete',
                 child: const Row(
                   children: [
                     Icon(Icons.delete_outline, size: 20, color: Colors.red),
@@ -439,7 +466,6 @@ class _SavedAddressesViewState extends State<SavedAddressesView> {
                     Text('Sil'),
                   ],
                 ),
-                onTap: () => _showDeleteAddressDialog(index),
               ),
             ],
             child: const Icon(Icons.more_vert, color: Colors.grey, size: 24),

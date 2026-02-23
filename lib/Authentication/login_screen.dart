@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../user/user_main_screen.dart';
+import '../utils/error_handler.dart';
 import 'register_screen.dart';
 import '../Home/admin_screen.dart';
 import '../Home/courier_screen.dart';
@@ -36,41 +37,86 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // 🔐 LOGIN
+  // 🔐 LOGIN - PROPER ERROR HANDLING
   Future<void> _attemptLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
+      // Firebase ile giriş yap
       final userCred =
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
+      // Kullanıcı belgesi kontrol et
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCred.user!.uid)
           .get();
 
+      if (!mounted) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
       setState(() => _isLoading = false);
 
-      final role = doc['role'] ?? 'user';
-      if (!mounted) return;
+      // Belgenin var olup olmadığını kontrol et
+      if (!doc.exists) {
+        _showErrorDialog('Kullanıcı Bulunamadı', 'Kullanıcı profili veritabanında bulunamadı.');
+        return;
+      }
 
+      // Rol bilgisini güvenli bir şekilde al
+      final role = doc.data()?['role'] ?? 'user';
+
+      // Rol'e göre yönlendir
       if (role == 'admin') {
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => AdminScreen()));
+            context, MaterialPageRoute(builder: (_) => const AdminScreen()));
       } else if (role == 'courier') {
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => CourierScreen()));
+            context, MaterialPageRoute(builder: (_) => const CourierScreen()));
       } else {
         Navigator.pushReplacement(
             context, MaterialPageRoute(builder: (_) => const UserMainScreen()));
       }
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+
+      final errorMsg = ErrorHandler.getAuthErrorMessage(e.code);
+      _showErrorDialog('Giriş Hatası', errorMsg);
+    } on FirebaseException catch (e) {
+      setState(() => _isLoading = false);
+      final errorMsg = ErrorHandler.getFirestoreErrorMessage(e.message ?? '');
+      _showErrorDialog('Ağ Hatası', errorMsg);
     } catch (e) {
       setState(() => _isLoading = false);
+      final errorMsg = ErrorHandler.getGeneralErrorMessage(e.toString());
+      _showErrorDialog('Beklenmeyen Hata', errorMsg);
     }
+  }
+
+  // Hata Dialog'unu Göster
+  void _showErrorDialog(String title, String message) {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tamam', style: TextStyle(color: primaryGreen)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -197,12 +243,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 const SizedBox(height: 28),
 
+                                // E-posta alanı
+                                _inputLabel('E-posta Adresi'),
+                                const SizedBox(height: 8),
                                 _inputField(
                                   controller: _emailController,
-                                  hint: 'Telefon Numarası',
-                                  icon: Icons.phone_android,
-                                  validator: (v) =>
-                                  v!.isEmpty ? 'Boş bırakılamaz' : null,
+                                  hint: 'example@mail.com',
+                                  icon: Icons.email_outlined,
+                                  validator: ErrorHandler.validateEmail,
                                 ),
                                 const SizedBox(height: 16),
 
@@ -374,4 +422,19 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
+  Widget _inputLabel(String text) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF374151),
+        ),
+      ),
+    );
+  }
 }
+
