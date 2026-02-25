@@ -3,6 +3,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gg/user/package_details_view.dart';
+import '../services/firestore_service.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -126,7 +127,7 @@ class _HomeViewState extends State<HomeView> {
                     style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Text("Hızlı, güvenilir ve temassız teslimat kapınızda.",
-                    style: TextStyle(color: Colors.white.withOpacity(0.9))),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.9))),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {
@@ -144,7 +145,7 @@ class _HomeViewState extends State<HomeView> {
               ],
             ),
           ),
-          Icon(Icons.local_shipping, size: 80, color: Colors.white.withOpacity(0.3)),
+          Icon(Icons.local_shipping, size: 80, color: Colors.white.withValues(alpha: 0.3)),
         ],
       ),
     );
@@ -170,50 +171,169 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  // Aktif Gönderiler Carousel (Kaydırmalı Kartlar)
+  // Aktif Gönderiler Carousel (Kaydırmalı Kartlar) - Dinamik Verilerle
   Widget _buildActiveShipmentsCarousel() {
-    return CarouselSlider(
-      options: CarouselOptions(
-        height: 180,
-        viewportFraction: 0.85,
-        enableInfiniteScroll: false,
-        enlargeCenterPage: true,
-      ),
-      items: [1, 2].map((i) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text("Kullanıcı oturumu yok", style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return StreamBuilder(
+      stream: FirestoreService().getUserActiveShipments(currentUser.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                "Aktif gönderi yok",
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        final shipments = snapshot.data!;
+
+        return CarouselSlider(
+          options: CarouselOptions(
+            height: 200,
+            viewportFraction: 0.85,
+            enableInfiniteScroll: false,
+            enlargeCenterPage: true,
           ),
-          child: Column(
-            children: [
-              Expanded(child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network("https://maps.googleapis.com/maps/api/staticmap?center=Istanbul&zoom=12&size=400x200&key=YOUR_API_KEY",
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[300], child: const Center(child: Icon(Icons.map, color: Colors.grey))),
-                ),
-              )),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text("#GE-88421", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: const Color(0xFF1DE9B6).withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
-                      child: const Text("YOLDA", style: TextStyle(color: Color(0xFF00BFA5), fontSize: 10, fontWeight: FontWeight.bold)),
-                    )
-                  ],
-                ),
-              )
-            ],
-          ),
+          items: shipments.map((shipment) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      child: Container(
+                        color: Colors.grey[200],
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.local_shipping, size: 40, color: Colors.grey),
+                              const SizedBox(height: 8),
+                              Text(
+                                shipment.pickupAddress,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
+                              const Text("→", style: TextStyle(fontSize: 16)),
+                              const SizedBox(height: 4),
+                              Text(
+                                shipment.deliveryAddress,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              shipment.trackingNumber,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(shipment.status).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                _getStatusText(shipment.status),
+                                style: TextStyle(
+                                  color: _getStatusColor(shipment.status),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "₺${shipment.price.toStringAsFixed(2)}",
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
+  }
+
+  // Durum rengini döndür
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'assigned':
+      case 'in_transit':
+        return Colors.blue;
+      case 'delivered':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // Durum metnini döndür (Türkçe)
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'pending':
+        return 'BEKLEMEDE';
+      case 'assigned':
+        return 'ATANDI';
+      case 'in_transit':
+        return 'YOLDA';
+      case 'delivered':
+        return 'TESLİM EDİLDİ';
+      case 'cancelled':
+        return 'İPTAL EDİLDİ';
+      default:
+        return status.toUpperCase();
+    }
   }
 
   // 3. En Alttaki Aksiyon Butonları (Paket Gönder & İşlem Geçmişi)
@@ -250,7 +370,7 @@ class _HomeViewState extends State<HomeView> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
         ],
       ),
       child: Column(
@@ -259,7 +379,7 @@ class _HomeViewState extends State<HomeView> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: iconColor),

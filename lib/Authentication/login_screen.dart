@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:crypto/crypto.dart';
 
 import '../user/user_main_screen.dart';
-import '../utils/error_handler.dart';
 import 'register_screen.dart';
 import '../Home/admin_screen.dart';
 import '../Home/courier_screen.dart';
@@ -37,86 +41,330 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // 🔐 LOGIN - PROPER ERROR HANDLING
+  // 🔐 LOGIN
   Future<void> _attemptLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
-      // Firebase ile giriş yap
       final userCred =
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      // Kullanıcı belgesi kontrol et
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCred.user!.uid)
           .get();
 
-      if (!mounted) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
       setState(() => _isLoading = false);
 
-      // Belgenin var olup olmadığını kontrol et
-      if (!doc.exists) {
-        _showErrorDialog('Kullanıcı Bulunamadı', 'Kullanıcı profili veritabanında bulunamadı.');
-        return;
-      }
+      final role = doc['role'] ?? 'user';
+      if (!mounted) return;
 
-      // Rol bilgisini güvenli bir şekilde al
-      final role = doc.data()?['role'] ?? 'user';
-
-      // Rol'e göre yönlendir
       if (role == 'admin') {
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+            context, MaterialPageRoute(builder: (_) => AdminScreen()));
       } else if (role == 'courier') {
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const CourierScreen()));
+            context, MaterialPageRoute(builder: (_) => CourierScreen()));
       } else {
         Navigator.pushReplacement(
             context, MaterialPageRoute(builder: (_) => const UserMainScreen()));
       }
     } on FirebaseAuthException catch (e) {
       setState(() => _isLoading = false);
+      if (!mounted) return;
 
-      final errorMsg = ErrorHandler.getAuthErrorMessage(e.code);
-      _showErrorDialog('Giriş Hatası', errorMsg);
-    } on FirebaseException catch (e) {
-      setState(() => _isLoading = false);
-      final errorMsg = ErrorHandler.getFirestoreErrorMessage(e.message ?? '');
-      _showErrorDialog('Ağ Hatası', errorMsg);
+      String errorMessage = 'Giriş başarısız oldu';
+
+      // Hata kodlarına göre Türkçe mesajlar (Firebase exception görmezsin)
+      if (e.code == 'user-not-found') {
+        errorMessage = 'Bir e-posta adresi ile hesap bulunamadı.\nLütfen kayıt olunuz.';
+      } else if (e.code == 'wrong-password') {
+        errorMessage = 'Şifre yanlış.\nLütfen tekrar deneyiniz.';
+      } else if (e.code == 'user-disabled') {
+        errorMessage = 'Bu hesap devre dışı bırakılmıştır.\nLütfen destek ile iletişime geçiniz.';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'Geçersiz e-posta adresi.\nLütfen kontrol edip tekrar deneyiniz.';
+      } else if (e.code == 'too-many-requests') {
+        errorMessage = 'Çok fazla başarısız giriş denemesi yapıldı.\nLütfen daha sonra tekrar deneyiniz.';
+      } else if (e.code == 'invalid-credential') {
+        errorMessage = 'E-posta veya şifre hatalı.\nLütfen kontrol edip tekrar deneyiniz.';
+      }
+
+      _showErrorDialog(errorMessage);
     } catch (e) {
       setState(() => _isLoading = false);
-      final errorMsg = ErrorHandler.getGeneralErrorMessage(e.toString());
-      _showErrorDialog('Beklenmeyen Hata', errorMsg);
+      if (!mounted) return;
+      _showErrorDialog('Bir hata oluştu.\nLütfen daha sonra tekrar deneyiniz.');
     }
   }
 
-  // Hata Dialog'unu Göster
-  void _showErrorDialog(String title, String message) {
-    if (!mounted) return;
-
-    showDialog(
+  // Hata dialog'ı göster - Tema Uyumlu
+  void _showErrorDialog(String message) {
+    showGeneralDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tamam', style: TextStyle(color: primaryGreen)),
+      barrierDismissible: true,
+      barrierLabel: 'Dialog',
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: Colors.white,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryGreen.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Hata Ikonu
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.error_rounded, size: 36, color: Color(0xFFEF4444)),
+                  ),
+                  const SizedBox(height: 16),
+                  // Başlık
+                  const Text(
+                    'Hata',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: textDark),
+                  ),
+                  const SizedBox(height: 8),
+                  // Mesaj
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 15, color: textMuted),
+                  ),
+                  const SizedBox(height: 24),
+                  // Tamam Butonu
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryGreen,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 32),
+                    ),
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                    child: const Text('Tamam', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  // 🔐 GOOGLE İLE GİRİŞ
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCred =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // Firestore'da kullanıcı kontrol et, yoksa oluştur
+      final userRef = FirebaseFirestore.instance.collection('users').doc(userCred.user!.uid);
+      final userSnapshot = await userRef.get();
+
+      if (!userSnapshot.exists) {
+        // Yeni kullanıcı oluştur
+        await userRef.set({
+          'uid': userCred.user!.uid,
+          'email': userCred.user!.email,
+          'name': userCred.user!.displayName ?? 'Google User',
+          'phone': '',
+          'role': 'user',
+          'profileImageUrl': userCred.user!.photoURL,
+          'createdAt': DateTime.now(),
+          'isActive': true,
+        });
+      }
+
+      final doc = await userRef.get();
+      setState(() => _isLoading = false);
+
+      final role = doc['role'] ?? 'user';
+      if (!mounted) return;
+
+      if (role == 'admin') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => AdminScreen()));
+      } else if (role == 'courier') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => CourierScreen()));
+      } else {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const UserMainScreen()));
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+
+      String errorMessage = 'Google ile giriş başarısız oldu';
+
+      if (e.code == 'account-exists-with-different-credential') {
+        errorMessage = 'Bu e-posta başka bir giriş yöntemi ile kayıtlı.\nLütfen o yöntemi kullanınız.';
+      } else if (e.code == 'invalid-credential') {
+        errorMessage = 'Google kimliği doğrulanamadı.\nLütfen tekrar deneyiniz.';
+      } else if (e.code == 'operation-not-allowed') {
+        errorMessage = 'Google ile giriş şu anda kullanılamıyor.\nLütfen daha sonra tekrar deneyiniz.';
+      }
+
+      _showErrorDialog(errorMessage);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+
+      // Kullanıcı iptal ettiyse hiçbir mesaj gösterme
+      if (e.toString().contains('PlatformException') ||
+          e.toString().contains('cancel')) {
+        return;
+      }
+
+      _showErrorDialog('Google ile giriş başarısız oldu.\nLütfen tekrar deneyiniz.');
+    }
+  }
+
+  // 🔐 APPLE İLE GİRİŞ
+  Future<void> _signInWithApple() async {
+    setState(() => _isLoading = true);
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+      );
+
+      final userCred =
+          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+
+      // Firestore'da kullanıcı kontrol et, yoksa oluştur
+      final userRef = FirebaseFirestore.instance.collection('users').doc(userCred.user!.uid);
+      final userSnapshot = await userRef.get();
+
+      if (!userSnapshot.exists) {
+        // Yeni kullanıcı oluştur
+        String fullName = 'Apple User';
+        if (appleCredential.givenName != null && appleCredential.familyName != null) {
+          fullName = '${appleCredential.givenName} ${appleCredential.familyName}';
+        } else if (userCred.user?.displayName != null) {
+          fullName = userCred.user!.displayName!;
+        }
+
+        await userRef.set({
+          'uid': userCred.user!.uid,
+          'email': userCred.user!.email ?? 'apple_${userCred.user!.uid}@privaterelay.appleid.com',
+          'name': fullName,
+          'phone': '',
+          'role': 'user',
+          'profileImageUrl': null,
+          'createdAt': DateTime.now(),
+          'isActive': true,
+        });
+      }
+
+      final doc = await userRef.get();
+      setState(() => _isLoading = false);
+
+      final role = doc['role'] ?? 'user';
+      if (!mounted) return;
+
+      if (role == 'admin') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => AdminScreen()));
+      } else if (role == 'courier') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => CourierScreen()));
+      } else {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const UserMainScreen()));
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+
+      String errorMessage = 'Apple ile giriş başarısız oldu';
+
+      if (e.code == 'account-exists-with-different-credential') {
+        errorMessage = 'Bu e-posta başka bir giriş yöntemi ile kayıtlı.\nLütfen o yöntemi kullanınız.';
+      } else if (e.code == 'invalid-credential') {
+        errorMessage = 'Apple kimliği doğrulanamadı.\nLütfen tekrar deneyiniz.';
+      } else if (e.code == 'operation-not-allowed') {
+        errorMessage = 'Apple ile giriş şu anda kullanılamıyor.\nLütfen daha sonra tekrar deneyiniz.';
+      }
+
+      _showErrorDialog(errorMessage);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+
+      // Kullanıcı iptal ettiyse hiçbir mesaj gösterme
+      if (e.toString().contains('SignUpCanceled') ||
+          e.toString().contains('Cancelled') ||
+          e.toString().contains('PlatformException')) {
+        return;
+      }
+
+      _showErrorDialog('Apple ile giriş başarısız oldu.\nLütfen tekrar deneyiniz.');
+    }
+  }
+
+  // Yardımcı fonksiyonlar
+  String _generateNonce([int length = 32]) {
+    final random = Random.secure();
+    final values = List<int>.generate(length, (i) => random.nextInt(256));
+    return base64Url.encode(values).replaceAll('=', '');
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
   }
 
   @override
@@ -243,14 +491,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 const SizedBox(height: 28),
 
-                                // E-posta alanı
-                                _inputLabel('E-posta Adresi'),
-                                const SizedBox(height: 8),
                                 _inputField(
                                   controller: _emailController,
-                                  hint: 'example@mail.com',
-                                  icon: Icons.email_outlined,
-                                  validator: ErrorHandler.validateEmail,
+                                  hint: 'Mail adresinizi giriniz',
+                                  icon: Icons.mail_outline,
+                                  validator: (v) =>
+                                  v!.isEmpty ? 'Boş bırakılamaz' : null,
                                 ),
                                 const SizedBox(height: 16),
 
@@ -353,13 +599,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       const EdgeInsets.symmetric(horizontal: 32),
                       child: Column(
                         children: [
-                          _socialButton(
-                              icon: Icons.g_mobiledata,
-                              text: 'Google ile devam et'),
+                          GestureDetector(
+                            onTap: _isLoading ? null : _signInWithGoogle,
+                            child: _socialButton(
+                                icon: Icons.g_mobiledata,
+                                text: 'Google ile devam et'),
+                          ),
                           const SizedBox(height: 12),
-                          _socialButton(
-                              icon: Icons.apple,
-                              text: 'Apple ile devam et'),
+                          GestureDetector(
+                            onTap: _isLoading ? null : _signInWithApple,
+                            child: _socialButton(
+                                icon: Icons.apple,
+                                text: 'Apple ile devam et'),
+                          ),
                         ],
                       ),
                     ),
@@ -422,19 +674,4 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
-  Widget _inputLabel(String text) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: Color(0xFF374151),
-        ),
-      ),
-    );
-  }
 }
-

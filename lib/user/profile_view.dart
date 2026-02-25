@@ -19,9 +19,10 @@ class ProfileView extends StatefulWidget {
 }
 
 class _ProfileViewState extends State<ProfileView> {
-  String userName = 'Yönetici';
-  String userPhone = '+90 555 123 45 67';
+  String userName = '';  // ← BOŞTAN BAŞLA
+  String userPhone = '';  // ← BOŞTAN BAŞLA
   String? profileImageUrl;
+  bool _isInitialized = false;  // ← LOADIng
 
   @override
   void initState() {
@@ -33,29 +34,43 @@ class _ProfileViewState extends State<ProfileView> {
   Future<void> _loadUserInfo() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        if (doc.exists) {
-          setState(() {
-            userName = doc.data()?['name'] ?? user.displayName ?? '';
+      if (user == null) {
+        if (mounted) setState(() => _isInitialized = true);
+        return;
+      }
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          if (doc.exists) {
+            // Firestore'dan çek (öncelikli)
+            userName = doc.data()?['name'] ?? user.displayName ?? 'Kullanıcı';
             userPhone = doc.data()?['phone'] ?? '';
             profileImageUrl = doc.data()?['profileImageUrl'];
-          });
-        } else {
-          setState(() {
-            userName = user.displayName ?? '';
+          } else {
+            // Firebase Auth'dan çek
+            userName = user.displayName ?? 'Kullanıcı';
             userPhone = '';
-            profileImageUrl = null;
-          });
-        }
+            profileImageUrl = user.photoURL;
+          }
+          _isInitialized = true;
+        });
       }
     } catch (e) {
       debugPrint('Kullanıcı bilgileri yüklenirken hata: $e');
+      if (mounted) {
+        setState(() {
+          userName = 'Kullanıcı';
+          _isInitialized = true;
+        });
+      }
     }
   }
+
 
   // Profil fotoğrafı güncelleme
   Future<void> _updateProfilePhoto() async {
@@ -70,6 +85,18 @@ class _ProfileViewState extends State<ProfileView> {
       await FirestoreService().updateUserProfile(uid: user.uid, profileImageUrl: url);
       setState(() { profileImageUrl = url; });
     }
+  }
+
+  // E-mail authentication kontrol
+  Future<bool> _isEmailAuthEnabled() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    final providers = user.providerData.map((p) => p.providerId).toList();
+    final isEmailAuthOnly = providers.isEmpty ||
+        (providers.length == 1 && providers.contains('password'));
+
+    return isEmailAuthOnly;
   }
 
   // Tema renkleri
@@ -155,6 +182,23 @@ class _ProfileViewState extends State<ProfileView> {
 
   // Şifre güncelleme
   Future<void> _changePassword() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Google/Apple ile giriş yapanları kontrol et
+    final providers = user.providerData.map((p) => p.providerId).toList();
+    final isEmailAuthOnly = providers.isEmpty ||
+        (providers.length == 1 && providers.contains('password'));
+
+    if (!isEmailAuthOnly) {
+      await _showThemedPopup(
+        'Uyarı',
+        'Sosyal ağ hesapları ile giriş yapanlar şifre değiştiremez.',
+        success: false
+      );
+      return;
+    }
+
     final oldPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     showGeneralDialog(
@@ -218,11 +262,32 @@ class _ProfileViewState extends State<ProfileView> {
                             try {
                               await user.reauthenticateWithCredential(cred);
                               await user.updatePassword(newPasswordController.text);
-                              Navigator.pop(context);
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
                               await _showThemedPopup('Başarılı', 'Şifre başarıyla değiştirildi.', success: true);
+                            } on FirebaseAuthException catch (e) {
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
+
+                              String errorMessage = 'Şifre değiştirilemedi';
+                              if (e.code == 'wrong-password') {
+                                errorMessage = 'Mevcut şifre yanlış.\nLütfen kontrol edip tekrar deneyiniz.';
+                              } else if (e.code == 'weak-password') {
+                                errorMessage = 'Yeni şifre çok zayıf.\nEn az 6 karakter olmalıdır.';
+                              } else if (e.code == 'requires-recent-login') {
+                                errorMessage = 'Güvenlik nedeniyle lütfen tekrar giriş yapınız.';
+                              } else if (e.code == 'invalid-credential') {
+                                errorMessage = 'Mevcut şifre yanlış.\nLütfen tekrar deneyiniz.';
+                              }
+
+                              await _showThemedPopup('Hata', errorMessage, success: false);
                             } catch (e) {
-                              Navigator.pop(context);
-                              await _showThemedPopup('Hata', 'Şifre değiştirilemedi: $e', success: false);
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
+                              await _showThemedPopup('Hata', 'Bir hata oluştu.\nLütfen tekrar deneyiniz.', success: false);
                             }
                           },
                           child: const Text('Kaydet', style: TextStyle(color: Colors.white)),
@@ -380,23 +445,74 @@ class _ProfileViewState extends State<ProfileView> {
                           onPressed: () async {
                             final user = FirebaseAuth.instance.currentUser;
                             if (user == null) return;
+
+                            // Google/Apple ile giriş yapanları kontrol et
+                            final providers = user.providerData.map((p) => p.providerId).toList();
+                            final isEmailAuthOnly = providers.isEmpty ||
+                                (providers.length == 1 && providers.contains('password'));
+
+                            if (!isEmailAuthOnly) {
+                              if (mounted) {
+                                Navigator.pop(context);
+                                await _showThemedPopup(
+                                  'Hata',
+                                  'Sosyal ağ hesapları ile giriş yapanlar e-posta değiştiremez.',
+                                  success: false
+                                );
+                              }
+                              return;
+                            }
+
                             try {
-                              await user.verifyBeforeUpdateEmail(emailController.text);
-                              await FirestoreService().updateUser(user.uid, {'email': emailController.text});
-                              Navigator.pop(context);
-                              await _showThemedPopup('Başarılı', 'E-posta güncellendi. Lütfen yeni e-posta ile tekrar giriş yapın.', success: true);
+                              // 1. ÖNCE Firestore
+                              await FirestoreService().updateUser(
+                                  user.uid,
+                                  {'email': emailController.text}
+                              );
+
+                              // 2. SONRA Firebase
+                              await user.verifyBeforeUpdateEmail(emailController.text.trim());
+
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
+
+                              await _showThemedPopup(
+                                  'Başarılı',
+                                  'E-posta başarıyla güncellendi.\nLütfen yeni e-posta ile tekrar giriş yapınız.',
+                                  success: true
+                              );
+
+                              // 3. Oturumu kapat
                               await FirebaseAuth.instance.signOut();
+
+                              // 4. Login'e yönlendir
                               if (mounted) {
                                 Navigator.of(context).pushAndRemoveUntil(
                                   MaterialPageRoute(builder: (_) => const LoginScreen()),
-                                  (route) => false,
+                                      (route) => false,
                                 );
                               }
                             } catch (e) {
-                              Navigator.pop(context);
-                              await _showThemedPopup('Hata', 'E-posta güncellenemedi: $e', success: false);
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
+
+                              String errorMsg = 'E-posta güncellenemedi.\nLütfen tekrar deneyiniz.';
+
+                              if (e.toString().contains('email-already-in-use')) {
+                                errorMsg = 'Bu e-posta zaten kullanılıyor.\nBaşka bir e-posta deneyiniz.';
+                              } else if (e.toString().contains('invalid-email')) {
+                                errorMsg = 'Geçersiz e-posta formatı.\nLütfen kontrol edin.';
+                              }
+
+                              if (mounted) {
+                                await _showThemedPopup('Hata', errorMsg, success: false);
+                              }
                             }
-                          },
+
+                          }
+                        ,
                           child: const Text('Kaydet', style: TextStyle(color: Colors.white)),
                         ),
                       ),
@@ -467,22 +583,145 @@ class _ProfileViewState extends State<ProfileView> {
                             backgroundColor: _errorColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: () async {
-                            try {
-                              await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
-                              await user.delete();
-                              Navigator.pop(context);
-                              await _showThemedPopup('Başarılı', 'Hesabınız silindi.', success: true);
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                                (route) => false,
-                              );
-                            } catch (e) {
-                              Navigator.pop(context);
-                              await _showThemedPopup('Hata', 'Hesap silinemedi: $e', success: false);
-                            }
-                          },
+                            onPressed: () async {
+                              try {
+                                // 1. Firestore sil
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(user.uid)
+                                    .delete();
+
+                                // 2. Firebase Auth sil
+                                await user.delete();
+
+                                // 3. Oturumu kapat
+                                await FirebaseAuth.instance.signOut();
+
+                                if (!mounted) return;
+
+                                // 4. Direkt login ekranına git (stack temizlenir)
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (_) => const LoginScreen(),
+                                  ),
+                                      (route) => false,
+                                );
+
+                              } catch (e) {
+
+                                String errorMsg =
+                                    'Hesap silinemedi.\nLütfen daha sonra tekrar deneyiniz.';
+
+                                if (e.toString().contains('requires-recent-login')) {
+                                  errorMsg =
+                                  'Güvenlik nedeniyle lütfen tekrar giriş yapınız.';
+                                } else if (e.toString().contains('too-many-requests')) {
+                                  errorMsg =
+                                  'Çok fazla istek yapıldı.\nDaha sonra tekrar deneyiniz.';
+                                }
+
+                                if (mounted) {
+                                  await _showThemedPopup('Hata', errorMsg, success: false);
+                                }
+                              }
+                            },
+
+
                           child: const Text('Sil', style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+
+  // Çıkış Confirmation Popup
+  Future<void> _showLogoutConfirmation() async {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dialog',
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: Colors.white,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryGreen.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // İkonu
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: _primaryGreen.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.logout, size: 36, color: _primaryGreen),
+                  ),
+                  const SizedBox(height: 16),
+                  // Başlık
+                  const Text(
+                    'Çıkış Yap',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textDark),
+                  ),
+                  const SizedBox(height: 8),
+                  // Mesaj
+                  const Text(
+                    'Çıkış yapmak istediğinize emin misiniz?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 15, color: _textMuted),
+                  ),
+                  const SizedBox(height: 24),
+                  // Butonlar
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey[300],
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('İptal', style: TextStyle(color: _textDark, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryGreen,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _logout();
+                          },
+                          child: const Text('Evet, Çık', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -512,9 +751,7 @@ class _ProfileViewState extends State<ProfileView> {
     } catch (e) {
       debugPrint('Çıkış yapılırken hata: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Çıkış yapılırken hata oluştu: $e')),
-        );
+        await _showThemedPopup('Hata', 'Çıkış yapılırken bir hata oluştu.\nLütfen tekrar deneyiniz.', success: false);
       }
     }
   }
@@ -535,10 +772,19 @@ class _ProfileViewState extends State<ProfileView> {
             onPressed: () async { await _editProfileInfo(); },
             tooltip: 'Profil Bilgilerini Düzenle',
           ),
-          IconButton(
-            icon: const Icon(Icons.email_outlined, color: Color(0xFF00BFA5)),
-            onPressed: () async { await _changeEmail(); },
-            tooltip: 'E-posta Güncelle',
+          FutureBuilder<bool>(
+            future: _isEmailAuthEnabled(),
+            builder: (context, snapshot) {
+              final isEnabled = snapshot.data ?? false;
+              return IconButton(
+                icon: Icon(
+                  Icons.email_outlined,
+                  color: isEnabled ? const Color(0xFF00BFA5) : Colors.grey,
+                ),
+                onPressed: isEnabled ? () async { await _changeEmail(); } : null,
+                tooltip: isEnabled ? 'E-posta Güncelle' : 'Sosyal ağ hesapları e-posta değiştirmez',
+              );
+            },
           ),
         ],
       ),
@@ -615,6 +861,13 @@ class _ProfileViewState extends State<ProfileView> {
 
   // Üst Kısım: Profil Fotoğrafı ve Dinamik İsim
   Widget _buildProfileHeader() {
+    if (!_isInitialized) {
+      return const Padding(
+        padding: EdgeInsets.all(20.0),
+        child: CircularProgressIndicator(),
+      );
+    }
+
     return Column(
       children: [
         Stack(
@@ -638,12 +891,19 @@ class _ProfileViewState extends State<ProfileView> {
           ],
         ),
         const SizedBox(height: 16),
-        Text(userName.isNotEmpty ? userName : 'İsim Yok', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(
+          userName.isNotEmpty ? userName : 'Kullanıcı',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 4),
-        Text(userPhone.isNotEmpty ? userPhone : 'Telefon Yok', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(
+          userPhone.isNotEmpty ? userPhone : 'Telefon numarası eklenmemiş',
+          style: const TextStyle(color: Colors.grey, fontSize: 14),
+        ),
       ],
     );
   }
+
 
   // Menü Grupları
   Widget _buildMenuSection({required String title, required List<Widget> items}) {
@@ -683,7 +943,7 @@ class _ProfileViewState extends State<ProfileView> {
     return SizedBox(
       width: double.infinity,
       child: TextButton.icon(
-        onPressed: _logout,
+        onPressed: _showLogoutConfirmation,
         icon: const Icon(Icons.logout, color: Colors.redAccent),
         label: const Text("Çıkış Yap", style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold)),
         style: TextButton.styleFrom(
@@ -695,3 +955,4 @@ class _ProfileViewState extends State<ProfileView> {
     );
   }
 }
+
