@@ -6,11 +6,10 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
-
 import '../user/user_main_screen.dart';
 import 'register_screen.dart';
-import '../Home/admin_screen.dart';
-import '../Home/courier_screen.dart';
+import '../admin/admin_screen.dart';
+import '../courier/courier_screen.dart';
 
 
 class LoginScreen extends StatefulWidget {
